@@ -1,0 +1,5 @@
+# Credenciales locales
+.env
+
+# Sistema
+.DS_Store
