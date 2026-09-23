@@ -1,0 +1,23 @@
+ANALISIS EN CAPAS DEL MODELO FISICO (codigo base sin modificar)
+PostgreSQL 17.11 / 2026-09-23 18:23
+
+=== CAPA A: fisico/modelo_fisico.sql sobre una base vacia ===
+psql:/sql/fisico/modelo_fisico.sql:2: ERROR:  relation "transactions" does not exist
+psql:/sql/fisico/modelo_fisico.sql:3: ERROR:  relation "transactions" does not exist
+psql:/sql/fisico/modelo_fisico.sql:7: ERROR:  relation "transactions" does not exist
+psql:/sql/fisico/modelo_fisico.sql:10: ERROR:  relation "transactions" does not exist
+-> Ruido: el script asume tablas preexistentes. No es el error de fondo.
+
+=== CAPA B: con las tablas del conceptual ya creadas ===
+psql:/sql/fisico/modelo_fisico.sql:7: ERROR:  "transactions" is not partitioned
+psql:/sql/fisico/modelo_fisico.sql:10: ERROR:  "transactions" is not partitioned
+-> Los CREATE INDEX pasan. Solo fallan las particiones:
+   PARTITION OF exige que el padre naciera con PARTITION BY.
+   PostgreSQL no permite convertir una tabla existente en particionada.
+
+=== CAPA C: declarando Transactions como PARTITION BY RANGE ===
+ERROR:  unique constraint on partitioned table must include all partitioning columns
+DETAIL:  PRIMARY KEY constraint on table "transactions" lacks column "transactiondate" which is part of the partition key.
+-> La PK debe contener la clave de particion: (TransactionID, TransactionDate).
+   Esto es una decision de arquitectura, no un error de sintaxis.
+   => Se difiere a la Fase 3.
