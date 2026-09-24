@@ -17,6 +17,10 @@ un modelo conceptual**: es DDL de PostgreSQL con `SERIAL`, `VARCHAR(100)` y
 constituye una diferencia de nivel de modelado. Se conserva en el repositorio como
 insumo histórico; el entregable de la Fase 1 es este documento.
 
+> **Nomenclatura.** Las entidades se nombran en español en este documento.
+> La correspondencia con los nombres de tabla en inglés está en
+> [`logico/modelo_logico.md`](../logico/modelo_logico.md#convención-de-nomenclatura).
+
 ---
 
 ## Diagrama entidad-relación
