@@ -1,0 +1,62 @@
+==> Recreando base limpia: eval_fisico
+==> Ejecutando /sql/fisico/modelo_fisico.sql
+----------------------------------------------------------------------
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+DO
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE VIEW
+CREATE TABLE
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+----------------------------------------------------------------------
+==> Tablas que quedaron creadas en eval_fisico:
+                        List of relations
+ Schema |           Name           |       Type        |  Owner  
+--------+--------------------------+-------------------+---------
+ public | account_balance_snapshot | table             | fintech
+ public | accounts                 | table             | fintech
+ public | customers                | table             | fintech
+ public | ledger_entries           | partitioned table | fintech
+ public | ledger_entries_2024_01   | table             | fintech
+ public | ledger_entries_2024_02   | table             | fintech
+ public | ledger_entries_2024_03   | table             | fintech
+ public | ledger_entries_2024_04   | table             | fintech
+ public | ledger_entries_2024_05   | table             | fintech
+ public | ledger_entries_2024_06   | table             | fintech
+ public | ledger_entries_2024_07   | table             | fintech
+ public | ledger_entries_2024_08   | table             | fintech
+ public | ledger_entries_2024_09   | table             | fintech
+ public | ledger_entries_2024_10   | table             | fintech
+ public | ledger_entries_2024_11   | table             | fintech
+ public | ledger_entries_2024_12   | table             | fintech
+ public | ledger_entries_2025_01   | table             | fintech
+ public | ledger_entries_2025_02   | table             | fintech
+ public | ledger_entries_2025_03   | table             | fintech
+ public | ledger_entries_2025_04   | table             | fintech
+ public | ledger_entries_2025_05   | table             | fintech
+ public | ledger_entries_2025_06   | table             | fintech
+ public | ledger_entries_2025_07   | table             | fintech
+ public | ledger_entries_2025_08   | table             | fintech
+ public | ledger_entries_2025_09   | table             | fintech
+ public | ledger_entries_2025_10   | table             | fintech
+ public | ledger_entries_2025_11   | table             | fintech
+ public | ledger_entries_2025_12   | table             | fintech
+ public | ledger_entries_default   | table             | fintech
+ public | transactions             | table             | fintech
+(30 rows)
+
+==> psql salio con codigo 0

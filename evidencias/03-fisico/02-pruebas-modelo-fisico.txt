@@ -1,0 +1,99 @@
+
+=== SETUP: dos clientes con una cuenta cada uno ===
+INSERT 0 2
+INSERT 0 2
+
+=== snapshot recien sembrado: ambas cuentas en 0 ===
+      email       | account_id | status 
+------------------+------------+--------
+ ana@ejemplo.com  |          1 | ACTIVE
+ beto@ejemplo.com |          2 | ACTIVE
+(2 rows)
+
+
+=== CASO 1: INSERT con status explicito CONFIRMED (DEBE FALLAR) ===
+    toda transaccion tiene que nacer PENDING
+ account_id | balance | entry_count 
+------------+---------+-------------
+          1 |  0.0000 |           0
+          2 |  0.0000 |           0
+(2 rows)
+
+psql:/sql/fisico/pruebas_modelo_fisico.sql:41: ERROR:  toda transaccion nace PENDING; se intento crear con status CONFIRMED
+CONTEXT:  PL/pgSQL function enforce_transaction_status_machine() line 5 at RAISE
+
+=== CASO 2: transferencia 100, ciclo de vida completo (DEBE PASAR) ===
+BEGIN
+INSERT 0 1
+INSERT 0 2
+COMMIT
+
+--- todavia PENDING: snapshot y vista deben seguir en 0 ---
+      email       | snapshot | vista 
+------------------+----------+-------
+ ana@ejemplo.com  |   0.0000 |     0
+ beto@ejemplo.com |   0.0000 |     0
+(2 rows)
+
+
+--- confirmada: snapshot debe coincidir con la vista recomputada ---
+UPDATE 1
+
+=== CASO 3: transicion invalida REJECTED -> CONFIRMED (DEBE FALLAR) ===
+      email       | snapshot  |   vista   | coinciden 
+------------------+-----------+-----------+-----------
+ ana@ejemplo.com  | -100.0000 | -100.0000 | t
+ beto@ejemplo.com |  100.0000 |  100.0000 | t
+(2 rows)
+
+BEGIN
+INSERT 0 1
+INSERT 0 2
+UPDATE 1
+COMMIT
+psql:/sql/fisico/pruebas_modelo_fisico.sql:96: ERROR:  transicion de status invalida: REJECTED -> CONFIRMED (transaccion 3)
+CONTEXT:  PL/pgSQL function enforce_transaction_status_machine() line 21 at RAISE
+
+=== CASO 4: reversa CONFIRMED -> REVERSED (DEBE PASAR, snapshot vuelve a 0) ===
+UPDATE 1
+
+--- revertida: snapshot y vista deben coincidir, ambos en 0 ---
+      email       | snapshot | vista 
+------------------+----------+-------
+ ana@ejemplo.com  |   0.0000 |     0
+ beto@ejemplo.com |   0.0000 |     0
+(2 rows)
+
+
+=== CASO 5: transicion invalida REVERSED -> CONFIRMED (DEBE FALLAR) ===
+psql:/sql/fisico/pruebas_modelo_fisico.sql:115: ERROR:  transicion de status invalida: REVERSED -> CONFIRMED (transaccion 2)
+CONTEXT:  PL/pgSQL function enforce_transaction_status_machine() line 21 at RAISE
+
+=== CASO 6: particionamiento — el asiento cae en la particion de su mes ===
+
+=== CASO 7: partition pruning visible en EXPLAIN ===
+    debe listar SOLO ledger_entries_2024_03 entre los Subplans/Scans
+       particion        | entry_id |      effective_at      
+------------------------+----------+------------------------
+ ledger_entries_2024_03 |        1 | 2024-03-15 15:00:00+00
+ ledger_entries_2024_03 |        2 | 2024-03-15 15:00:00+00
+(2 rows)
+
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Seq Scan on ledger_entries_2024_03 ledger_entries
+   Filter: ((effective_at >= '2024-03-01 00:00:00+00'::timestamp with time zone) AND (effective_at < '2024-04-01 00:00:00+00'::timestamp with time zone))
+(2 rows)
+
+BEGIN
+
+=== CASO 8: fecha fuera del rango 2024-2025 cae en la particion DEFAULT ===
+INSERT 0 1
+INSERT 0 2
+COMMIT
+       particion        | entry_id |      effective_at      
+------------------------+----------+------------------------
+ ledger_entries_default |        5 | 2026-06-01 05:00:00+00
+ ledger_entries_default |        6 | 2026-06-01 05:00:00+00
+(2 rows)
+
