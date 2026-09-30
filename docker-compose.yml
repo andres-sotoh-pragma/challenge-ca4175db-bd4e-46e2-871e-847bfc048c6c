@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: fintech-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fintech}
+      POSTGRES_USER: ${POSTGRES_USER:-fintech}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?definir en .env}
+      # Locale es-CO para que ordenamientos y mensajes sean consistentes
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Repo montado read-only: ejecutamos los scripts a mano, NO via initdb.d
+      - ./conceptual:/sql/conceptual:ro
+      - ./logico:/sql/logico:ro
+      - ./fisico:/sql/fisico:ro
+      - ./db:/sql/db:ro
+    command:
+      # Parametros pensados para carga transaccional; ajustados a la VM de 2GB
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - max_connections=100
+      # Necesario para que EXPLAIN nos muestre el partition pruning en Fase 3
+      - -c
+      - enable_partitionwise_join=on
+      - -c
+      - enable_partitionwise_aggregate=on
+      # Logueamos todo el DDL para poder evidenciar que se aplico
+      - -c
+      - log_statement=ddl
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fintech} -d ${POSTGRES_DB:-fintech}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  pgdata:

@@ -1,0 +1,22 @@
+==> Recreando base limpia: eval_logico
+==> Ejecutando /sql/logico/modelo_logico.sql
+----------------------------------------------------------------------
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE VIEW
+----------------------------------------------------------------------
+==> Tablas que quedaron creadas en eval_logico:
+             List of relations
+ Schema |      Name      | Type  |  Owner  
+--------+----------------+-------+---------
+ public | accounts       | table | fintech
+ public | customers      | table | fintech
+ public | ledger_entries | table | fintech
+ public | transactions   | table | fintech
+(4 rows)
+
+==> psql salio con codigo 0

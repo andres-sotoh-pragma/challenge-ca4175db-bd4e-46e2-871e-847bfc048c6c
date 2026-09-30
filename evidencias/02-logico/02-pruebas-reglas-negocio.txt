@@ -1,0 +1,80 @@
+
+=== SETUP: dos clientes con una cuenta cada uno ===
+INSERT 0 2
+INSERT 0 2
+      email       | account_id | status 
+------------------+------------+--------
+ ana@ejemplo.com  |          1 | ACTIVE
+ beto@ejemplo.com |          2 | ACTIVE
+(2 rows)
+
+
+=== CASO 1: transferencia balanceada de 100 (DEBE PASAR) ===
+BEGIN
+INSERT 0 1
+INSERT 0 2
+COMMIT
+
+=== CASO 2: R1 — transferencia descuadrada -100 / +90 (DEBE FALLAR) ===
+BEGIN
+INSERT 0 1
+INSERT 0 2
+psql:/sql/logico/pruebas_modelo_logico.sql:52: ERROR:  R1 violada: los asientos de la transaccion 2 suman -10.0000, deben sumar 0
+CONTEXT:  PL/pgSQL function assert_transaction_balances() line 24 at RAISE
+
+=== CASO 3: R2 — transaccion con un solo asiento (DEBE FALLAR) ===
+BEGIN
+INSERT 0 1
+INSERT 0 1
+psql:/sql/logico/pruebas_modelo_logico.sql:65: ERROR:  R2 violada: la transaccion 3 tiene 1 asiento(s); se requieren al menos 2
+CONTEXT:  PL/pgSQL function assert_transaction_balances() line 18 at RAISE
+
+=== CASO 4: transferencia con comision, 3 asientos (DEBE PASAR) ===
+    Ana -100, Beto +98, cuenta de ingresos del banco +2
+BEGIN
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 3
+
+=== CASO 5: R7 — reintento con la misma clave de idempotencia (DEBE FALLAR) ===
+COMMIT
+psql:/sql/logico/pruebas_modelo_logico.sql:95: ERROR:  duplicate key value violates unique constraint "uq_transactions_idempotency_key"
+DETAIL:  Key (idempotency_key)=(idem-0001) already exists.
+
+=== CASO 6: asiento de importe cero (DEBE FALLAR) ===
+psql:/sql/logico/pruebas_modelo_logico.sql:103: ERROR:  new row for relation "ledger_entries" violates check constraint "ck_ledger_entries_amount"
+DETAIL:  Failing row contains (9, 1, 1, 0.0000, 2026-09-24 02:24:19.339774+00).
+
+=== CASO 7: correo duplicado (DEBE FALLAR) ===
+psql:/sql/logico/pruebas_modelo_logico.sql:108: ERROR:  duplicate key value violates unique constraint "uq_customers_email"
+DETAIL:  Key (email)=(ana@ejemplo.com) already exists.
+
+=== CASO 8: intentar asignar el ID manualmente (DEBE FALLAR) ===
+    GENERATED ALWAYS lo impide; con SERIAL esto habria pasado y roto la secuencia
+psql:/sql/logico/pruebas_modelo_logico.sql:114: ERROR:  cannot insert a non-DEFAULT value into column "customer_id"
+DETAIL:  Column "customer_id" is an identity column defined as GENERATED ALWAYS.
+HINT:  Use OVERRIDING SYSTEM VALUE to override.
+
+=== RESULTADO: saldos derivados (solo transacciones CONFIRMED) ===
+
+=== AUDITORIA R1: transacciones descuadradas en toda la base ===
+    (debe devolver 0 filas)
+       email        | account_id |  balance  | entry_count 
+--------------------+------------+-----------+-------------
+ ana@ejemplo.com    |          1 | -200.0000 |           2
+ beto@ejemplo.com   |          2 |  198.0000 |           2
+ ingresos@banco.com |          3 |    2.0000 |           1
+(3 rows)
+
+ transaction_id | descuadre 
+----------------+-----------
+(0 rows)
+
+ total_sistema 
+---------------
+        0.0000
+(1 row)
+
+
+=== El dinero total del sistema suma cero (invariante global) ===

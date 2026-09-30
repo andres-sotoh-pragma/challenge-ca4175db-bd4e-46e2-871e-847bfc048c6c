@@ -1,0 +1,197 @@
+============================================================
+# QUERY 1 -- Extracto de una cuenta en un mes (account_id=1, 2024-06)
+============================================================
+--- bench_before: sin particiones ni indices (logico) ---
+                                                                                     QUERY PLAN                                                                                      
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Gather (actual time=0.293..28.642 rows=1664 loops=1)
+   Workers Planned: 2
+   Workers Launched: 2
+   Buffers: shared hit=3720
+   ->  Parallel Seq Scan on ledger_entries (actual time=0.040..23.870 rows=555 loops=3)
+         Filter: ((effective_at >= '2024-06-01 00:00:00+00'::timestamp with time zone) AND (effective_at < '2024-07-01 00:00:00+00'::timestamp with time zone) AND (account_id = 1))
+         Rows Removed by Filter: 146148
+         Buffers: shared hit=3720
+ Planning:
+   Buffers: shared hit=80
+ Planning Time: 0.579 ms
+ Execution Time: 28.780 ms
+(12 rows)
+
+
+--- bench_after: particionado por RANGE(effective_at) + indice (account_id, effective_at) ---
+                                                                                       QUERY PLAN                                                                                        
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on ledger_entries_2024_06 ledger_entries (actual time=0.339..1.292 rows=1664 loops=1)
+   Recheck Cond: ((account_id = 1) AND (effective_at >= '2024-06-01 00:00:00+00'::timestamp with time zone) AND (effective_at < '2024-07-01 00:00:00+00'::timestamp with time zone))
+   Heap Blocks: exact=150
+   Buffers: shared hit=163
+   ->  Bitmap Index Scan on ledger_entries_2024_06_account_id_effective_at_idx (actual time=0.314..0.314 rows=1664 loops=1)
+         Index Cond: ((account_id = 1) AND (effective_at >= '2024-06-01 00:00:00+00'::timestamp with time zone) AND (effective_at < '2024-07-01 00:00:00+00'::timestamp with time zone))
+         Buffers: shared hit=13
+ Planning:
+   Buffers: shared hit=323
+ Planning Time: 1.385 ms
+ Execution Time: 1.372 ms
+(11 rows)
+
+
+============================================================
+# QUERY 2 -- Saldo actual de una cuenta (account_id=1)
+============================================================
+--- bench_before: vista account_balances (recomputa SUM sobre todo el historial) ---
+                                                        QUERY PLAN                                                        
+--------------------------------------------------------------------------------------------------------------------------
+ Subquery Scan on account_balances (actual time=68.339..68.999 rows=1 loops=1)
+   Buffers: shared hit=9761
+   ->  GroupAggregate (actual time=68.338..68.997 rows=1 loops=1)
+         Buffers: shared hit=9761
+         ->  Nested Loop Left Join (actual time=26.417..66.741 rows=40109 loops=1)
+               Buffers: shared hit=9761
+               ->  Index Scan using accounts_pkey on accounts a (actual time=0.033..0.036 rows=1 loops=1)
+                     Index Cond: (account_id = 1)
+                     Buffers: shared hit=6
+               ->  Gather (actual time=26.382..63.950 rows=40109 loops=1)
+                     Workers Planned: 2
+                     Workers Launched: 2
+                     Buffers: shared hit=9755
+                     ->  Parallel Hash Join (actual time=23.842..60.415 rows=13370 loops=3)
+                           Hash Cond: (t.transaction_id = le.transaction_id)
+                           Buffers: shared hit=9755
+                           ->  Parallel Seq Scan on transactions t (actual time=0.269..33.406 rows=66667 loops=3)
+                                 Filter: ((status)::text = 'CONFIRMED'::text)
+                                 Buffers: shared hit=5879
+                           ->  Parallel Hash (actual time=12.339..12.340 rows=13370 loops=3)
+                                 Buckets: 65536  Batches: 1  Memory Usage: 2784kB
+                                 Buffers: shared hit=3720
+                                 ->  Parallel Seq Scan on ledger_entries le (actual time=0.012..7.905 rows=13370 loops=3)
+                                       Filter: (account_id = 1)
+                                       Rows Removed by Filter: 133333
+                                       Buffers: shared hit=3720
+ Planning:
+   Buffers: shared hit=368
+ Planning Time: 1.346 ms
+ Execution Time: 69.054 ms
+(30 rows)
+
+
+--- bench_after: tabla account_balance_snapshot (materializado, sincronizado por trigger) ---
+                                                      QUERY PLAN                                                      
+----------------------------------------------------------------------------------------------------------------------
+ Index Scan using account_balance_snapshot_pkey on account_balance_snapshot (actual time=0.088..0.088 rows=1 loops=1)
+   Index Cond: (account_id = 1)
+   Buffers: shared hit=6
+ Planning:
+   Buffers: shared hit=64
+ Planning Time: 0.364 ms
+ Execution Time: 0.127 ms
+(7 rows)
+
+
+============================================================
+# QUERY 3 -- Todos los asientos de una transaccion (transaction_id=99944)
+============================================================
+--- bench_before: sin indice sobre transaction_id: seq scan ---
+                                     QUERY PLAN                                      
+-------------------------------------------------------------------------------------
+ Gather (actual time=10.165..10.222 rows=2 loops=1)
+   Workers Planned: 2
+   Workers Launched: 2
+   Buffers: shared hit=3720
+   ->  Parallel Seq Scan on ledger_entries (actual time=5.578..6.800 rows=1 loops=3)
+         Filter: (transaction_id = 99944)
+         Rows Removed by Filter: 146702
+         Buffers: shared hit=3720
+ Planning:
+   Buffers: shared hit=69
+ Planning Time: 0.256 ms
+ Execution Time: 10.261 ms
+(12 rows)
+
+
+--- bench_after: indice (transaction_id) por particion, sin filtro de fecha: recorre las 24+1 ---
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append (actual time=0.183..0.749 rows=2 loops=1)
+   Buffers: shared hit=52
+   ->  Index Scan using ledger_entries_2024_01_transaction_id_idx on ledger_entries_2024_01 ledger_entries_1 (actual time=0.083..0.083 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=5
+   ->  Index Scan using ledger_entries_2024_02_transaction_id_idx on ledger_entries_2024_02 ledger_entries_2 (actual time=0.015..0.015 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_03_transaction_id_idx on ledger_entries_2024_03 ledger_entries_3 (actual time=0.085..0.085 rows=2 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=3
+   ->  Index Scan using ledger_entries_2024_04_transaction_id_idx on ledger_entries_2024_04 ledger_entries_4 (actual time=0.036..0.036 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_05_transaction_id_idx on ledger_entries_2024_05 ledger_entries_5 (actual time=0.046..0.046 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_06_transaction_id_idx on ledger_entries_2024_06 ledger_entries_6 (actual time=0.018..0.018 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_07_transaction_id_idx on ledger_entries_2024_07 ledger_entries_7 (actual time=0.024..0.024 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_08_transaction_id_idx on ledger_entries_2024_08 ledger_entries_8 (actual time=0.021..0.021 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_09_transaction_id_idx on ledger_entries_2024_09 ledger_entries_9 (actual time=0.023..0.023 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_10_transaction_id_idx on ledger_entries_2024_10 ledger_entries_10 (actual time=0.017..0.017 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_11_transaction_id_idx on ledger_entries_2024_11 ledger_entries_11 (actual time=0.051..0.051 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2024_12_transaction_id_idx on ledger_entries_2024_12 ledger_entries_12 (actual time=0.020..0.020 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_01_transaction_id_idx on ledger_entries_2025_01 ledger_entries_13 (actual time=0.014..0.014 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_02_transaction_id_idx on ledger_entries_2025_02 ledger_entries_14 (actual time=0.025..0.025 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_03_transaction_id_idx on ledger_entries_2025_03 ledger_entries_15 (actual time=0.081..0.081 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_04_transaction_id_idx on ledger_entries_2025_04 ledger_entries_16 (actual time=0.018..0.018 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_05_transaction_id_idx on ledger_entries_2025_05 ledger_entries_17 (actual time=0.013..0.013 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_06_transaction_id_idx on ledger_entries_2025_06 ledger_entries_18 (actual time=0.022..0.022 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_07_transaction_id_idx on ledger_entries_2025_07 ledger_entries_19 (actual time=0.034..0.034 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_08_transaction_id_idx on ledger_entries_2025_08 ledger_entries_20 (actual time=0.031..0.031 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_09_transaction_id_idx on ledger_entries_2025_09 ledger_entries_21 (actual time=0.017..0.017 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_10_transaction_id_idx on ledger_entries_2025_10 ledger_entries_22 (actual time=0.018..0.018 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_11_transaction_id_idx on ledger_entries_2025_11 ledger_entries_23 (actual time=0.009..0.009 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Index Scan using ledger_entries_2025_12_transaction_id_idx on ledger_entries_2025_12 ledger_entries_24 (actual time=0.017..0.017 rows=0 loops=1)
+         Index Cond: (transaction_id = 99944)
+         Buffers: shared hit=2
+   ->  Seq Scan on ledger_entries_default ledger_entries_25 (actual time=0.006..0.006 rows=0 loops=1)
+         Filter: (transaction_id = 99944)
+ Planning:
+   Buffers: shared hit=2157
+ Planning Time: 10.513 ms
+ Execution Time: 0.883 ms
+(80 rows)
+
+

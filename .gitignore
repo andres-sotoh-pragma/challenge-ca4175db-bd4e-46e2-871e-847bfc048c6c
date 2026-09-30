@@ -1,0 +1,9 @@
+# Credenciales locales
+.env
+
+# Sistema
+.DS_Store
+
+# Entorno virtual para scripts de generacion de datos (Fase 3)
+.venv/
+__pycache__/
